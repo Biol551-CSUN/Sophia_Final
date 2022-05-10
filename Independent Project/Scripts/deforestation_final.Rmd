@@ -1,0 +1,180 @@
+---
+title: "Deforestation"
+author: "Sophia Boyd"
+date: "5/9/2022"
+output:
+  html_document:
+    toc: TRUE
+    theme: sandstone
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.path = "../Output/")
+```
+
+
+# Introduction
+
+Much of the world's surface is covered by forest alone. 1/3 of our habitable land area is taken up by forests.
+
+In order to determine the net change in forest cover, we need to look at how much deforestation occurs.
+
+Due to the expansion of agriculture, the global forest area has drastically reduced. Over 12 million acres of forest is lost every year, which is driven mostly by agriculture. 
+
+We will use the global deforestation data to further examine:
+
+- Where are we losing forests?
+- What is impacting the loss of forests?
+
+
+## Load Libraries
+```{r}
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(dplyr)
+library(maps)
+library(mapdata)
+library(mapproj)
+library(gganimate)
+library(hrbrthemes)
+library(beyonce)
+library(flair)
+library(RColorBrewer)
+library(LaCroixColoR)
+library(devtools)
+```
+
+## Load Data
+```{r}
+forest <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/forest.csv')
+forest_area <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/forest_area.csv')
+brazil_loss <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/brazil_loss.csv')
+soybean_use <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/soybean_use.csv')
+vegetable_oil <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/vegetable_oil.csv')
+```
+
+
+## Visuals {.tabset}
+
+### Global Forest Area
+
+Forests take up 38% of the habitable land area which means they are spread throughout the entire world
+```{r}
+newforest_area <- forest_area %>% 
+  rename(country = entity) %>% 
+  select(-c(code)) %>% 
+  filter(year %in% c("2020"))
+
+country <- map_data("world")
+
+country_map <- merge(country, newforest_area, by.x = "region", by.y = "country") 
+
+country_map <- arrange(country_map, group, order)
+
+ggplot(country_map, aes(x = long, y = lat, group = group, fill = forest_area)) +
+  geom_polygon(color = "black") +
+  theme_minimal() +
+  scale_fill_distiller(palette = "Dark2") +
+  coord_map(projection = "mercator",
+            xlim = c(-180,180)) +
+  theme(panel.background = element_rect(fill = "lightblue"))+
+  labs(fill = "Amount of Forest Area")
+
+```
+
+### Loss of Brazilian Forest
+
+There are several different drivers that has caused Brazil to lose much of its Brazilian forest over the years.
+
+```{r}
+#Create a new data set
+brazil_long <- brazil_loss %>% 
+  pivot_longer(cols = commercial_crops:small_scale_clearing,
+               names_to = "Variables",
+               values_to = "Values")
+
+brazil_pie <- brazil_long %>% 
+  arrange(desc(Variables)) %>% 
+  mutate(prop = Values / sum(brazil_long$Values) *100) %>% 
+  mutate(ypos = cumsum(prop) - 0.5*prop)
+
+```
+
+```{r}
+#Loss in 2001
+brazil_2001 <- brazil_pie %>% 
+  filter(year %in% c("2001"))
+
+ggplot(brazil_2001, aes(x = "", y = prop, fill = Variables))+
+  geom_bar(stat = "identity", width = 1, color = "white")+
+  coord_polar("y", start = 0)+
+  theme_void() +
+  scale_fill_manual(values = lacroix_palette(type = "paired"))
+
+#Loss in 2013
+brazil_2013 <- brazil_pie %>% 
+  filter(year %in% c("2013"))
+
+ggplot(brazil_2013, aes(x = "", y = prop, fill = Variables))+
+  geom_bar(stat = "identity", width = 1, color = "white")+
+  coord_polar("y", start = 0)+
+  theme_void()+
+  scale_fill_manual(values = lacroix_palette(type = "paired"))
+```
+
+  
+### Soybean vs. Vegetable Oil Produced
+
+The top drivers of global deforestation consist of vegetable oil crops, soybean and palm oil. 
+
+Over the past decades, the rising demand for these foods has began threatening ecosystem functions in the world's forest areas.
+```{r}
+#Soybean Production and Use
+
+soybean_new <- soybean_use %>% 
+  pivot_longer(cols = human_food:processed,
+               names_to = "Variables",
+               values_to = "Values") %>% 
+  select(-c(code)) %>% 
+  drop_na() %>% 
+  filter(year > "1999",
+         entity %in% c("Americas", "Russia", "Brazil", "Germany"))
+  
+
+ soybean_new %>% 
+  ggplot(aes(x = year, y = Values, color = Variables)) +
+  geom_line() + 
+  geom_point() + 
+  facet_wrap(~entity, scales = "free") +
+  theme_ipsum() + 
+  labs(title = "Production of soybean and usage",
+       x = "Year",
+       y = "Soybean Usage",
+       color = "Food used for") +
+  scale_color_manual(values = lacroix_palette("PassionFruit", type = "discrete")) +
+  transition_reveal(year)
+
+
+#Vegetable Oil Production 
+
+vegetable_new <- vegetable_oil %>% 
+  select(-c(code)) %>% 
+  drop_na() %>% 
+  filter(crop_oil %in% c("Soybean", "Maize", "Sunflower", "Olive, virgin", "Palm"),
+         year > "1999",
+         entity %in% c("Americas", "Russia", "Brazil", "Germany"))
+
+vegetable_new %>% 
+  ggplot(aes(x = year, y = production, color = crop_oil)) +
+  geom_line() + 
+  geom_point() + 
+  facet_wrap(~entity, scales = "free") +
+  theme_ipsum() + 
+  labs(title = "Production of vegetable oil by crop type",
+       x = "Year",
+       y = "Oil production (tonnes)",
+       color = "Crop Type") +
+  scale_color_manual(values = lacroix_palette("PassionFruit", type = "discrete")) +
+  transition_reveal(year)
+```
